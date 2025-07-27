@@ -28,10 +28,12 @@ from torch.optim import AdamW
 from transformers import (
     AutoModelForCausalLM,
     AutoConfig,
+    AutoTokenizer,
     get_scheduler,
     default_data_collator,
     set_seed,
 )
+from PIL import Image
 from datasets import load_dataset
 from tqdm import tqdm
 
