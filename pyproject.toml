@@ -9,4 +9,5 @@ dependencies = [
     "pillow>=11.3.0",
     "torch>=2.7.1",
     "transformers>=4.54.0",
+    "wandb>=0.21.0",
 ]
