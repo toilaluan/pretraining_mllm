@@ -103,7 +103,7 @@ def mixed_image_tokenize(
     patch_tokens: List[str],
     start_image_token: str = "<image>",
     end_image_token: str = "</image>",
-    mid_token_range: Tuple[float, float] = (0.1, 0.9),
+    mid_token_range: Tuple[float, float] = (0.1, 0.2),
     padding: bool = True,
     truncation: bool = True,
     max_length: int = 2048,
@@ -169,11 +169,9 @@ def mixed_image_tokenize(
         skip_special_tokens=True,
     )
     image = create_note_image(mid_text)
-    start_image_token_id = tokenizer.encode(start_image_token, add_special_tokens=False)
-    end_image_token_id = tokenizer.encode(end_image_token, add_special_tokens=False)
-
     # Create image token sequence
-    image_token_text = "".join(patch_tokens)
+    image_token_text = [start_image_token] + patch_tokens + [end_image_token]
+    image_token_text = "".join(image_token_text)
     image_token_ids = tokenizer.encode(
         image_token_text,
         add_special_tokens=False,
@@ -192,9 +190,7 @@ def mixed_image_tokenize(
         "input_ids": torch.cat(
             [
                 pre_ids,
-                torch.tensor(start_image_token_id),
                 image_token_ids,
-                torch.tensor(end_image_token_id),
                 post_ids,
             ]
         ),

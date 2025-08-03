@@ -31,13 +31,13 @@ class CFG:
 
     # training
     batch_size = 1
-    grad_acc_steps = 8
+    grad_acc_steps = 1
     max_length = 1024
     lr = 5e-5
     num_epochs = 1
     warmup_steps = 1_000
     save_every = 1_000
-    generate_every = 500          # NEW
+    generate_every = 500        # NEW
 
     # dataset
     dataset_name = "HuggingFaceFW/fineweb"
@@ -68,9 +68,9 @@ vocab_size = len(tokenizer)
 # ------------------------------------------------------------------
 # MODELS
 # ------------------------------------------------------------------
-llm_config = AutoConfig.from_pretrained(cfg.llm_name)
-# llm = AutoModelForCausalLM.from_pretrained(cfg.llm_name).to(cfg.device)
-llm = AutoModelForCausalLM.from_config(llm_config).to(cfg.device)
+# llm_config = AutoConfig.from_pretrained(cfg.llm_name)
+# llm = AutoModelForCausalLM.from_config(llm_config).to(cfg.device)
+llm = AutoModelForCausalLM.from_pretrained(cfg.llm_name).to(cfg.device)
 llm.resize_token_embeddings(vocab_size)
 
 from transformers import AutoModel, AutoImageProcessor
@@ -154,6 +154,7 @@ train_loader = DataLoader(train_ds,
 optimizer = torch.optim.AdamW(
     list(llm.parameters()) + list(image_proj.parameters()),
     lr=cfg.lr,
+    weight_decay=0.01,
 )
 total_steps = cfg.max_samples // (cfg.batch_size * cfg.grad_acc_steps)
 scheduler = get_linear_schedule_with_warmup(
@@ -178,11 +179,11 @@ def make_input_embeds(mixed_ids, pixel_values):
     b_idx, pos_idx = torch.where(mask)
     for b in range(img_emb.size(0)):
         idx = pos_idx[b_idx == b]
-        tok_emb[b, idx] = img_emb[b]  # drop CLS token
+        tok_emb[b, idx] = img_emb[b]
     return tok_emb
 
 
-def generate_sample(step):
+def generate_sample(step, tokenizer, end_img_id):
     """
     Run a quick greedy generation using one random image + prefix from the dataloader.
     """
@@ -191,7 +192,8 @@ def generate_sample(step):
     batch = next(iter(train_loader))
     pixel_values = batch["pixel_values"][:1].to(cfg.device)
     mixed_ids = batch["mixed_ids"][:1].to(cfg.device)
-
+    post_start = batch["post_start"][:1].to(cfg.device)
+    mixed_ids = mixed_ids[:, :post_start]
     with torch.no_grad():
         input_embeds = make_input_embeds(mixed_ids, pixel_values)
         generated = llm.generate(
@@ -203,6 +205,7 @@ def generate_sample(step):
         )
     prompt = tokenizer.decode(mixed_ids[0], skip_special_tokens=False)
     decoded = tokenizer.decode(generated[0], skip_special_tokens=False)
+    print(decoded)
     llm.train()
     wandb.log({"generated": wandb.Html(f"<pre>{prompt}\n\n---\n\n{decoded}</pre>")},
               step=step)
@@ -215,6 +218,9 @@ wandb.init(project="unsupervised-vlm", config=cfg.__dict__)
 step = 0
 llm.train()
 image_proj.train()
+
+start_img_id = tokenizer.convert_tokens_to_ids(cfg.start_img)
+end_img_id = tokenizer.convert_tokens_to_ids(cfg.end_img)
 
 for epoch in range(cfg.num_epochs):
     for batch in train_loader:
@@ -246,7 +252,7 @@ for epoch in range(cfg.num_epochs):
                             labels=labels)
             mixed_loss = mixed_out.loss
 
-            loss = 0.5 * text_loss + 0.5 * mixed_loss
+            loss = 0.25 * text_loss + 0.75 * mixed_loss
 
         # Backward
         loss.backward()
@@ -277,7 +283,7 @@ for epoch in range(cfg.num_epochs):
 
         # Generate sample
         if step > 0 and step % cfg.generate_every == 0:
-            generate_sample(step)
+            generate_sample(step, tokenizer, end_img_id=tokenizer.convert_tokens_to_ids(cfg.end_img))
 
         step += 1
         if step >= cfg.max_samples:
