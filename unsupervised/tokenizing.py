@@ -4,76 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 import textwrap
 from typing import Dict, List, Union, Tuple, Any
 import torch
-
-
-def create_note_image(text: str, size: Tuple[int, int] = (512, 512)) -> Image.Image:
-    """
-    Create a note-style image from text with proper formatting and readability.
-    """
-    # Create image with white background
-    img = Image.new("RGB", size, color="white")
-    draw = ImageDraw.Draw(img)
-
-    # Try to use a bold sans-serif font, fallback to default
-    try:
-        # Try different font paths for cross-platform compatibility
-        font_paths = [
-            "/System/Library/Fonts/Arial Bold.ttf",  # macOS
-            "C:\\Windows\\Fonts\\arialbd.ttf",  # Windows
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux
-        ]
-        font = None
-        for path in font_paths:
-            try:
-                font = ImageFont.truetype(path, 24)
-                break
-            except (OSError, IOError):
-                continue
-
-        if font is None:
-            font = ImageFont.load_default()
-    except:
-        font = ImageFont.load_default()
-
-    # Calculate margins
-    margin = 40
-    max_width = size[0] - 2 * margin
-    max_height = size[1] - 2 * margin
-
-    # Clean and prepare text
-    text = text.strip()
-    if not text:
-        text = "Empty text"
-
-    # Wrap text to fit image width
-    wrapped_lines = []
-    for paragraph in text.split("\n"):
-        if paragraph.strip():
-            # Estimate characters per line based on font size
-            avg_char_width = font.getbbox("A")[2] - font.getbbox("A")[0]
-            chars_per_line = max(1, max_width // avg_char_width)
-            lines = textwrap.wrap(paragraph, width=chars_per_line)
-            wrapped_lines.extend(lines)
-        else:
-            wrapped_lines.append("")  # Preserve empty lines
-
-    # Calculate line height
-    line_height = font.getbbox("Ag")[3] - font.getbbox("Ag")[1] + 6
-
-    # Limit lines to fit in image
-    max_lines = max_height // line_height
-    if len(wrapped_lines) > max_lines:
-        wrapped_lines = wrapped_lines[: max_lines - 1] + ["..."]
-
-    # Draw text
-    y = margin
-    for line in wrapped_lines:
-        if y + line_height > size[1] - margin:
-            break
-        draw.text((margin, y), line, fill="black", font=font)
-        y += line_height
-
-    return img
+from .image_utils import create_note_image
 
 
 def setup_tokenizer(
@@ -103,7 +34,7 @@ def mixed_image_tokenize(
     patch_tokens: List[str],
     start_image_token: str = "<image>",
     end_image_token: str = "</image>",
-    mid_token_range: Tuple[float, float] = (0.1, 0.2),
+    mid_token_range: Tuple[float, float] = (0.1, 0.7),
     padding: bool = True,
     truncation: bool = True,
     max_length: int = 2048,
@@ -184,17 +115,41 @@ def mixed_image_tokenize(
     pre_attention = full_attention_mask[:mid_start]
     image_attention = torch.ones(len(image_token_ids))
     post_attention = full_attention_mask[mid_end:]
+    mixed_ids = torch.cat(
+        [
+            pre_ids,
+            image_token_ids,
+            post_ids,
+        ]
+    )
+    mixed_attention = torch.cat(
+        [
+            pre_attention,
+            image_attention,
+            post_attention,
+        ]
+    )
+    if len(mixed_ids) < max_length:
+        mixed_ids = torch.cat(
+            [
+                mixed_ids,
+                torch.full((max_length - len(mixed_ids),), tokenizer.pad_token_id)
+            ]
+        )
+        mixed_attention = torch.cat(
+            [
+                mixed_attention,
+                torch.full((max_length - len(mixed_attention),), 0)
+            ]
+        )
+    else:
+        mixed_ids = mixed_ids[:max_length]
+        mixed_attention = mixed_attention[:max_length]
 
     # Store mixed image representation
     output["mixed_image"] = {
-        "input_ids": torch.cat(
-            [
-                pre_ids,
-                image_token_ids,
-                post_ids,
-            ]
-        ),
-        "attention_mask": torch.cat([pre_attention, image_attention, post_attention]),
+        "input_ids": mixed_ids,
+        "attention_mask": mixed_attention,
         "image": image,
         "original_text": mid_text,
         "image_token_ids": image_token_ids,
