@@ -92,10 +92,6 @@ class CheckpointManager:
         self.accelerator = accelerator
 
     def save_checkpoint(self, step: int, llm, tokenizer, image_proj) -> str:
-        if not self.accelerator.is_main_process:
-            return ""
-        self.accelerator.wait_for_everyone()
-
         ckpt_dir = self.base_dir / f"step_{step}"
         ckpt_dir.mkdir(exist_ok=True)
 
