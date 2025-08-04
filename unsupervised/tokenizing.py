@@ -133,14 +133,11 @@ def mixed_image_tokenize(
         mixed_ids = torch.cat(
             [
                 mixed_ids,
-                torch.full((max_length - len(mixed_ids),), tokenizer.pad_token_id)
+                torch.full((max_length - len(mixed_ids),), tokenizer.pad_token_id),
             ]
         )
         mixed_attention = torch.cat(
-            [
-                mixed_attention,
-                torch.full((max_length - len(mixed_attention),), 0)
-            ]
+            [mixed_attention, torch.full((max_length - len(mixed_attention),), 0)]
         )
     else:
         mixed_ids = mixed_ids[:max_length]
