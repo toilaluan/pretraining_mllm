@@ -51,7 +51,9 @@ class TrainingConfig:
     batch_size: int = 8
     grad_acc_steps: int = 1
     max_length: int = 1024
-    lr: float = 5e-4
+    llm_lr: float = 5e-5
+    vit_lr: float = 6e-6
+    image_proj_lr: float = 5e-5
     num_epochs: int = 1
     warmup_steps: int = 1_000
     max_steps: int = 1_000_000_000  # global steps cap
@@ -336,9 +338,11 @@ class VisionLanguageTrainer:
 
         end_tok_id = self.tokenizer.convert_tokens_to_ids(self.config.end_img)
         post_start = [
-            (seq == end_tok_id).nonzero(as_tuple=True)[0][0].item() + 1
-            if (seq == end_tok_id).any()
-            else int(seq.ne(self.tokenizer.pad_token_id).sum().item())
+            (
+                (seq == end_tok_id).nonzero(as_tuple=True)[0][0].item() + 1
+                if (seq == end_tok_id).any()
+                else int(seq.ne(self.tokenizer.pad_token_id).sum().item())
+            )
             for seq in mixed_ids
         ]
         post_start = torch.tensor(post_start, dtype=torch.long)
@@ -355,11 +359,24 @@ class VisionLanguageTrainer:
     # ---- optim
 
     def _setup_training(self):
-        params = []
-        params += list(self.image_proj.parameters())
-        params += list(self.llm.parameters())
+        llm_params = list(self.llm.parameters())
+        image_proj_params = list(self.image_proj.parameters())
+        vit_params = list(self.image_enc.parameters())
 
-        self.optimizer = torch.optim.AdamW(params, lr=self.config.lr, weight_decay=5e-5)
+        self.optimizer = torch.optim.AdamW(
+            {
+                "params": llm_params,
+                "lr": self.config.llm_lr,
+            },
+            {
+                "params": image_proj_params,
+                "lr": self.config.image_proj_lr,
+            },
+            {
+                "params": vit_params,
+                "lr": self.config.vit_lr,
+            },
+        )
         self.scheduler = get_constant_schedule_with_warmup(
             self.optimizer, num_warmup_steps=self.config.warmup_steps
         )

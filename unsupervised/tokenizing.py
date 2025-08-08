@@ -99,7 +99,7 @@ def mixed_image_tokenize(
         mid_ids,
         skip_special_tokens=True,
     )
-    image = create_note_image(mid_text)
+    image = create_note_image(mid_text, width=512, height=512)
     # Create image token sequence
     image_token_text = [start_image_token] + patch_tokens + [end_image_token]
     image_token_text = "".join(image_token_text)
