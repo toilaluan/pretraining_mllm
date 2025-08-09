@@ -9,9 +9,9 @@ def create_note_image(
     width=800,
     height=600,
     output_path="note_image.png",
-    font_path=None,
+    font_path="ARIAL.TTF",
     text_color="black",
-    padding=40,
+    padding=5,
 ):
     """
     Create a note image with dynamic font sizing that fills the available space.

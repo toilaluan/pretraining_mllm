@@ -34,7 +34,7 @@ def mixed_image_tokenize(
     patch_tokens: List[str],
     start_image_token: str = "<image>",
     end_image_token: str = "</image>",
-    mid_token_range: Tuple[float, float] = (0.1, 0.7),
+    mid_token_range: Tuple[float, float] = (0.1, 0.4),
     padding: bool = True,
     truncation: bool = True,
     max_length: int = 2048,
